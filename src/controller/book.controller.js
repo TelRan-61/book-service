@@ -107,7 +107,8 @@ export const updateBookTitle = async (req, res) => {
                     attributes: {
                         include: [[sequelize.col('birth_date'), 'birthDate']],
                         exclude: ['birth_date']
-                    }, through: {attributes: []}
+                    },
+                    through: {attributes: []}
                 }
             ],
             transaction: t
@@ -130,4 +131,23 @@ export const updateBookTitle = async (req, res) => {
             message: 'Failed to update book'
         });
     }
+}
+
+export const findBooksByAuthor = async (req, res) => {
+    const author = await Author.findByPk(req.params.name);
+    if (!author) {
+        return res.status(404).send({error: `Author with name ${req.params.name} not found`});
+    }
+    const books = await author.getBooks({
+        joinTableAttributes: [],
+        include: [{
+            model: Author, as: 'authors',
+            attributes: {
+                include: [[sequelize.col('birth_date'), 'birthDate']],
+                exclude: ['birth_date']
+            },
+            through: {attributes: []}
+        }],
+    });
+    return res.json(books);
 }
