@@ -2,10 +2,10 @@ import {Author, Book, Publisher} from "../model/index.js";
 import {sequelize} from "../config/database.js";
 
 export const addBook = async (req, res) => {
-    const t = await sequelize.transaction({readOnly: true});
+    const t = await sequelize.transaction();
     try {
         const {isbn, title, authors, publisher} = req.body;
-        const existingBook = await Book.findByPk(isbn);
+        const existingBook = await Book.findByPk(isbn, {transaction: t});
         if (existingBook) {
             await t.rollback();
             return res.status(409).send({
@@ -47,17 +47,87 @@ export const addBook = async (req, res) => {
 
 export const findBookByIsbn = async (req, res) => {
     const book = await Book.findByPk(req.params.isbn, {
-            include: [
-                {model: Author, as: 'authors',
-                    attributes: {
-                        include: [[sequelize.col('birth_date'), 'birthDate']],
-                        exclude: ['birth_date']
-                    }, through: {attributes: []}}
-            ]
-        });
+        include: [
+            {
+                model: Author, as: 'authors',
+                attributes: {
+                    include: [[sequelize.col('birth_date'), 'birthDate']],
+                    exclude: ['birth_date']
+                }, through: {attributes: []}
+            }
+        ]
+    });
     if (book) {
         return res.json(book);
     } else {
         return res.status(404).send({error: `Book with ISBN ${req.params.isbn} not found`});
+    }
+}
+
+export const removeBook = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const book = await Book.findByPk(req.params.isbn, {
+            include: [
+                {
+                    model: Author, as: 'authors',
+                    attributes: {
+                        include: [[sequelize.col('birth_date'), 'birthDate']],
+                        exclude: ['birth_date']
+                    }, through: {attributes: []}
+                }
+            ],
+            transaction: t
+        });
+        if (book) {
+            await book.destroy({transaction: t});
+            await t.commit();
+            return res.json(book);
+        } else {
+            await t.rollback();
+            return res.status(404).send({error: `Book with ISBN ${req.params.isbn} not found`});
+        }
+    } catch (e) {
+        await t.rollback();
+        console.error('Error removing book:', e);
+        return res.status(500).send({
+            error: e.message,
+            message: 'Failed to remove book'
+        });
+    }
+}
+
+export const updateBookTitle = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const book = await Book.findByPk(req.params.isbn, {
+            include: [
+                {
+                    model: Author, as: 'authors',
+                    attributes: {
+                        include: [[sequelize.col('birth_date'), 'birthDate']],
+                        exclude: ['birth_date']
+                    }, through: {attributes: []}
+                }
+            ],
+            transaction: t
+        });
+        if (book) {
+            // book.title = req.params.title;
+            // await book.save({transaction: t});
+            await book.update({title: req.params.title}, {transaction: t});
+            await t.commit();
+            return res.json(book);
+        } else {
+            await t.rollback();
+            return res.status(404).send({error: `Book with ISBN ${req.params.isbn} not found`});
+        }
+    } catch (e) {
+        await t.rollback();
+        console.error('Error updating book:', e);
+        return res.status(500).send({
+            error: e.message,
+            message: 'Failed to update book'
+        });
     }
 }
